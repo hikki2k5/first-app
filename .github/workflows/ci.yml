@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "master", "main", "develop" ]
+    branches: [ "develop", "main", "master", "production" ]
   pull_request:
-    branches: [ "master", "main", "develop" ]
+    branches: [ "develop", "main", "master", "production" ]
 
 jobs:
   build-test:
@@ -19,16 +19,20 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "17"
-          cache: "maven"
+          cache: "gradle"
+
+      # Nếu repo của bạn có gradlew thì dùng gradlew (chuẩn nhất)
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
 
       - name: Test
-        run: mvn -B test
+        run: ./gradlew test
 
-      - name: Build jar
-        run: mvn -B clean package -DskipTests
+      - name: Build bootJar
+        run: ./gradlew bootJar -x test
 
       - name: Upload jar artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
-          path: target/*.jar
+          path: build/libs/*.jar
