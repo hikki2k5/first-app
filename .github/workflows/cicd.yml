@@ -1,0 +1,68 @@
+name: CI-CD
+
+on:
+  push:
+    branches: ["develop", "staging", "production"]
+  pull_request:
+    branches: ["develop", "staging", "production"]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    name: Build (bootJar)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build bootJar
+        run: ./gradlew bootJar -x test
+
+      - name: Upload jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: build/libs/*.jar
+
+  deploy:
+    name: Deploy to Railway
+    needs: ci
+    runs-on: ubuntu-latest
+
+    # CHỈ deploy khi push (không deploy khi PR) và chỉ cho staging/production
+    if: >
+      github.event_name == 'push' &&
+      (github.ref_name == 'staging' || github.ref_name == 'production')
+
+    container: ghcr.io/railwayapp/cli:latest
+
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      SVC_ID: ${{ secrets.RAILWAY_SERVICE }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        shell: bash
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          case "$BRANCH" in
+            staging) ENV="staging" ;;
+            production) ENV="production" ;;
+            *) echo "No deploy mapping for branch=$BRANCH"; exit 1 ;;
+          esac
+
+          echo "Deploying branch=$BRANCH to Railway env=$ENV service=$SVC_ID"
+          railway up --service="$SVC_ID" --environment="$ENV" --detach
