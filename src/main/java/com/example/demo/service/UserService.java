@@ -36,6 +36,7 @@ public class UserService {
         return jwtUtil.generateToken(user);
     }
 
+    // Login
     public String login(LoginRequest loginRequest){
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
