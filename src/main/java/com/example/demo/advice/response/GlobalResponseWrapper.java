@@ -1,6 +1,8 @@
 package com.example.demo.advice.response;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
@@ -11,47 +13,59 @@ import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
-
-@Slf4j(topic = "GLOBAL-OBJECT-RESPONSE-WRAPPER")
 @RestControllerAdvice
+@Slf4j(topic = "GLOBAL-OBJECT-RESPONSE-WRAPPER")
 public class GlobalResponseWrapper implements ResponseBodyAdvice<Object> {
 
     @Override
-    public boolean supports(
-            @NonNull MethodParameter returnType,
-            @NonNull Class<? extends HttpMessageConverter<?>> MapperType
-    ) {
+    public boolean supports(MethodParameter returnType,
+                            Class<? extends HttpMessageConverter<?>> converterType) {
         return true;
     }
 
     @Override
     public Object beforeBodyWrite(
             Object body,
-            @NonNull MethodParameter returnType,
-            @NonNull MediaType selectedContentType,
-            @NonNull Class<? extends HttpMessageConverter<?>> selectedMapperType,
-            @NonNull ServerHttpRequest request,
-            @NonNull ServerHttpResponse response
-    ) {
+            MethodParameter returnType,
+            MediaType selectedContentType,
+            Class<? extends HttpMessageConverter<?>> selectedConverterType,
+            ServerHttpRequest request,
+            ServerHttpResponse response) {
 
-        String requestPath = request.getURI().getPath();
+        String path = request.getURI().getPath();
 
-        if(requestPath.contains("api-docs") || requestPath.contains("swagger"))
+        // bỏ swagger
+        if (path.contains("swagger") || path.contains("api-docs")) {
             return body;
+        }
 
-        if(body instanceof ResultApiRes || body instanceof byte[])
+        // đã wrap rồi
+        if (body instanceof ResultApiRes) {
             return body;
+        }
 
-        HttpStatus statusRes = HttpStatus.OK;
-        response.setStatusCode(statusRes);
         ResultApiRes res = new ResultApiRes();
         res.setSuccess(true);
         res.setMessage("Successful");
-        res.setStatus(statusRes);
-        res.setCode(statusRes.value());
-        res.setPath(requestPath);
+        res.setPath(path);
         res.setResponseData(body);
+        res.setCode(200);
+        res.setStatus(HttpStatus.OK);
+
+        // ⭐ xử lý riêng String
+        if (body instanceof String) {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                return mapper.writeValueAsString(res);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         return res;
     }
 }
+
+
 

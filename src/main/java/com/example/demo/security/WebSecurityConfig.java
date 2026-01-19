@@ -5,6 +5,7 @@ import com.example.demo.security.jwt.JwtUtil;
 import com.example.demo.service.CustomOAuth2UserService;
 import com.example.demo.service.OAuth2AuthenticationSuccessHandler;
 import com.example.demo.service.UserDetailsServiceImpl;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.apache.tomcat.util.net.openssl.ciphers.Authentication;
 import org.springframework.context.annotation.Bean;
@@ -34,23 +35,48 @@ public class WebSecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
+                // ✅ API thường disable CSRF (vì không dùng session form login)
                 .csrf(csrf -> csrf.disable())
+
+                // ✅ Stateless cho JWT
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth.requestMatchers("/auth/login", "/auth/register", "/auth/login/oauth2").permitAll()
-                        .requestMatchers("/auth/admin/**").hasRole("ADMIN")
-                        .anyRequest().authenticated())
+
+                // ✅ Gắn AuthenticationProvider (QUAN TRỌNG)
                 .authenticationProvider(authenticationProvider())
+
+                .authorizeHttpRequests(auth -> auth
+                        // ⚠️ đặt admin TRƯỚC /auth/** để không bị permitAll nuốt mất
+                        .requestMatchers("/auth/admin/**").hasRole("ADMIN")
+
+                        // public endpoints
+                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+
+                        .anyRequest().authenticated()
+                )
+
+                // ✅ JWT filter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
+                // ✅ Khi thiếu auth -> trả JSON 401 (OK)
+                .exceptionHandling(ex -> ex.authenticationEntryPoint((req, res, e) -> {
+                    res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    res.setContentType("application/json");
+                    res.getWriter().write("{\"message\":\"Unauthorized\"}");
+                }))
+
+                // ✅ OAuth2 login
                 .oauth2Login(oauth -> oauth
-                .userInfoEndpoint(userInfo -> userInfo
-                        .userService(customOAuth2UserService)
-                )
-                .successHandler(oAuth2AuthenticationSuccessHandler)
-        );
+                        .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
+                        .successHandler(oAuth2AuthenticationSuccessHandler)
+                );
+
         return http.build();
     }
+
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
